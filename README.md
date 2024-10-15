@@ -1,4 +1,7 @@
-# PyExchangePasswordSpray
+# PyExchangePasswordSpray forked from the orginal author  iomoath/PyExchangePasswordSpray
+# Accept --delay and --jitter as the only delay variables for controlling time between requests.
+# Generate random delays for each request.
+# Replace the original delay feature with added delay in each request along jitter
 
 Microsoft Exchange password spraying tool with proxy capabilities.
 
@@ -8,7 +11,8 @@ Microsoft Exchange password spraying tool with proxy capabilities.
 * Set a delay between each password spray.
 * Use user & password list from a txt file
 * Multi-threading support
-
+* Accept --delay and --jitter as the only delay variables for controlling time between requests.
+* Generate random delays for each request.
 
 
 ### Usage
